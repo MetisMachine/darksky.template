@@ -1,6 +1,6 @@
-project_token: {{token}}
-name: {{name}}
+project_token: 1cf10e490c953cd5344cdbe3
+name: darksky.template
 language: python
 entrypoint: main.py
 environment:
-  - DARKSKY_KEY: enter_api_key_here
+  - key: value

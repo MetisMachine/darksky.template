@@ -1,8 +1,6 @@
-
-# coding: utf-8
-
-# In[43]:
-
+# # Weather Forecast Sample Data Ingest
+# This template fetches the current forecast for a particular zip code and persists those data to the Metis Machine data store.
+# This example actually leverages two external APIs, one to query geographic coordinates for a given zip code, and the second to fetch weather data for those coordinates.
 
 import os
 import requests
@@ -10,7 +8,9 @@ from datetime import datetime
 import pandas as pd
 
 
-# In[11]:
+from skafossdk import *
+print('initializing the SDK connection')
+skafos = Skafos()
 
 
 # Weather API Details
@@ -22,40 +22,41 @@ location_api_key = os.environ['ZIPCODEAPI_KEY']
 location_api_url = "https://www.zipcodeapi.com/rest/"   
 
 
-# In[12]:
-
-
 def get_location_for_zip(zipcode):
+    """ use the zipcodeapi.com endpoint
+        Args:
+            zipcode (int): the requested location by zip code, cast to string if not already
+        Returns:
+            dict: dictionary containing keys 'lng' and 'lat'
+    """
     url = location_api_url + location_api_key + '/info.json/' + str(zipcode).strip() + '/degrees'
     print('fetching {}'.format(url))
     return requests.get(url).json()
 
 
-# In[13]:
-
-
 def get_forecast(lon, lat):
+    """ Use the darksky.net endpoint
+        Args:
+            lon (float): longitude (x coordinate) to request weather forecast for
+            lat (float): lattitude (y coordinate) to request weather forecast for
+        Returns:
+            dict: the darksky forecast json as a dictionary
+    """
     url = weather_api_url + weather_api_key + '/{},{}'.format(lat, lon)
     print('fetching {}'.format(url))
     return requests.get(url).json()
 
 
-# In[15]:
-
-
 location_zipcodes = ["23250"]  # 23250 Richmond Airport
 
 
-# In[34]:
-
-
-forecasts = get_forecast_for_zips(location_zipcodes)
-
-
-# In[40]:
-
-
 def forecast_rows(zipcodes):
+    """ Map a list of zipcodes into individual data rows containing forecast data per day
+        Args:
+            zipcodes (list(str)): locations to fetch weather forecasts for
+        Returns:
+            list(dict): data rows per forecast day, per location
+    """
     date_fetched = datetime.now()
     for zipcode in zipcodes:
         ll = get_location_for_zip(zipcode)
@@ -82,14 +83,56 @@ def forecast_rows(zipcodes):
             }
 
 
-# In[46]:
-
-
+# forecast_rows returns a list of dictionaries, which is directly convertable to a Pandas dataframe
 forecast_data = pd.DataFrame(forecast_rows(location_zipcodes))
 
 
-# In[47]:
+# cast datetimes to just date for persisting to the database
+forecast_data['date'] = forecast_data['date'].apply(lambda d: d.date())
+forecast_data['date_fetched'] = forecast_data['date_fetched'].apply(lambda d: d.date())
 
 
+# validate that the returned data is what we expect
 forecast_data.iloc[:3]
+
+
+# ### Persist forecast data
+# Save these forecast data for later use via the Skafos SDK. This requires specifying a schema for how we want to store these records.
+
+# types here are as-specified in SQL (CQL really) rather than python
+schema = {
+    "table_name": "weather_forecast_by_zip",
+    "options": {
+        "primary_key": ['date', 'date_fetched', 'zipcode', 'source'],
+        "order_by": ['date_fetched desc']
+    },
+    "columns": {
+        'source': 'text',
+        'date_fetched': 'date',
+        'date': 'date',
+        'zipcode': 'text',
+        'latitude': 'float',
+        'longitude': 'float',
+        'tmax': 'float',
+        'tmin': 'float',
+        'humidity': 'float',
+        'wind_speed': 'float',
+        'pressure': 'float',
+        'precip_total': 'float',
+        'precip_prob': 'float',
+        'sunrise': 'timestamp',
+        'sunset': 'timestamp',
+        'cloud_cover': 'float',
+        'heat_index': 'float'
+    }
+}
+
+
+data_out = forecast_data.dropna().to_dict(orient='records')
+
+
+dataresult = skafos.engine.save(schema, data_out).result()
+
+
+dataresult
 
