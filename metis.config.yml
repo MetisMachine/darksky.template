@@ -1,5 +1,5 @@
-project_token: 1cf10e490c953cd5344cdbe3
-name: darksky.template
+project_token: {{token}}
+name: {{name}}
 language: python
 entrypoint: main.py
 environment:
