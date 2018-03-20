@@ -1,4 +1,7 @@
 project_token: {{token}}
 name: {{name}}
-language: python
-entrypoint: main.py
+jobs:
+  - job_id: {{job_id}}
+    language: python
+    name: Main
+    entrypoint: main.py
